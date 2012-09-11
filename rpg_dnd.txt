@@ -1,0 +1,927 @@
+'''
+    file: rpg_dnd.py
+    made by: oderi
+    description: an rpg with some of the features still missing (including but not limited to actually working)
+    note: "print "olol"" is quite often my code for "this part hasn't been coded yet"
+    sorry about the lack of comments
+'''
+
+from random import *
+from time import *
+import math
+import pickle
+
+class Monster:    
+    def __init__(self, name, lvl, ac, strength, dexterity, constitution, intelligence, wisdom, charisma, toHitStat, maxHp, exp, cred, dmg):
+        self.name = name
+        self.lvl = lvl
+        self.ac = ac
+        self.strength = strength
+        self.dexterity = dexterity
+        self.constitution = constitution
+        self.intelligence = intelligence
+        self.wisdom = wisdom
+        self.charisma = charisma
+        self.toHitStat = toHitStat
+        self.hp = maxHp
+        self.currentHp = self.hp
+        self.exp = exp
+        self.cred = cred
+        self.dmg = dmg
+        self.attack = 4 * self.stre + self.dext // 2
+        self.defense = 2 * self.stre + self.dext
+    def getToHit(self):
+        toHitRoll = roll(1, 20)
+        if self.toHitStat == "Strength":
+            return toHitRoll + int(math.floor(eval(self.strength) // 2 - 5))
+    def getDmg(self):
+        dieNr, dieVal = self.dmg.split("d")
+        return roll(dieNr, dieVal)
+
+
+class Character:
+    def __init__(self, name, cls, lvl, strength, dexterity, constitution, intelligence, wisdom, charisma, exp, cred, hpPot, mpPot, attBonus, defBonus, dmgRes, fireRes, frostRes, lightningRes):
+        self.name = name
+        self.cls = cls
+        self.lvl = lvl
+        if self.lvl == 0:
+            self.expGoal = 50
+        self.strength = strength
+        self.dexterity = dexterity
+        self.constitution = constitution
+        self.intelligence = intelligence
+        self.wisdom = wisdom
+        self.charisma = charisma
+        self.exp = exp
+        self.cred = cred
+        self.hpPot = hpPot
+        self.mpPot = mpPot
+        self.attBonus = attBonus
+        self.defBonus = defBonus
+        self.dmgRes = dmgRes
+        self.fireRes = fireRes
+        self.frostRes = frostRes
+        self.lightningRes = lightningRes
+    def firstSetup(self):
+        self.hp = 10 + self.lvl + 2 * self.constitution
+        self.mp = 3 + self.lvl + 2 * self.intelligence
+        self.currentHp = self.hp
+        self.currentMp = self.mp
+        self.inventory = []
+        self.toHitBonus = 0
+        WarriorStartingGear = [woodenSword, woodenShield, halfABucket, wifeBeater, None, None]
+        WizardStartingGear = [crookedStaff, None, dunceCap, tribalTshirt, None, None]
+        RogueStartingGear = [woodenDagger, woodenDagger, leatherHelmet, oldArcherJacket, None, None]
+        WarriorToHitStat = self.strength
+        WizardToHitStat = self.intelligence
+        RogueToHitStat = self.dexterity
+        self.gear = eval(self.cls + "StartingGear")
+        for item in self.gear:
+            if item == None:
+                continue
+            item.equip(self, "equip")
+        self.gearSlot = ["Left hand", "Right Hand", "Head", "Torso", "Hands", "Feet"]
+    def getToHit(self):
+        toHitRoll = roll(1, 20)
+        if self.cls == "Warrior":   
+            attribBonus = int(math.floor(eval(self.strength) // 2 - 5))
+        elif self.cls == "Wizard":
+            attribBonus = int(math.floor(eval(self.intelligence) // 2 - 5))
+        else:
+            attribBonus = int(math.floor(eval(self.dexterity) // 2 - 5))
+        return toHitRoll + attribBonus + self.toHitBonus
+    def fill(self):
+        self.hp = 10 + self.classHpMult * self.lvl + 2 * self.constitution
+        self.mp = 3 + self.classMpMult * self.lvl + 2 * self.intelligence
+        self.currentHp = self.hp
+        self.currentMp = self.mp        
+    def levelup(self):
+        print "\nStat points successfully distributed."
+        self.fill()
+        sleep(1)
+    def invAction(self):
+        while True:
+            print "\n\nPlease select which one you want to access:\n"
+            print "1. Inventory"
+            print "2. Gear"
+            print "3. Cancel\n"
+            invChoice = raw_input("Type the number: ")
+            if invChoice == "1":
+                print "\n\nInventory:\n"
+                if not self.inventory == []: # checks if there is anything to print in the inventory
+                    count = 0
+                    for item in self.inventory:
+                        print str(count + 1) + ".", item.name
+                        count += 1
+                    print "\nWhat do you want to do?\n"
+                    print "1. Equip an item"
+                    print "2. Drop an item"
+                    print "3. Cancel\n"     
+                    invOption = raw_input("Type the number: ")
+                    if invOption == "1":
+                        invEquip = raw_input("\nType the number of the item you want to equip: ")
+                        try:
+                            invObject = self.inventory[int(invEquip) - 1]
+                            if self.gear[invObject.position] == None: # checks if the gear slot is free
+                                self.gear[invObject.position] = invObject # "copies" the item there
+                                self = invObject.applyBonus(self, "equip") # adds the item bonus to [stat]Bonus
+                                del self.inventory[int(invEquip) - 1] # removes the item from inventory
+                                print "\nPiece of gear successfully equipped."
+                                sleep(1)
+                            else:
+                                print "\nThat gear slot is already in use."
+                                print "Please remove the piece of gear from the slot and try again."
+                                raw_input()
+                                continue
+                        except IndexError: # if the user has entered an invalid inventory list number, an indexerror will occur
+                            error()
+                            continue
+                    elif invOption == "2":
+                        invDrop = raw_input("\nType the number of the item you want to drop: ")
+                        print "\nWARNING! Dropping will cause you to permanently lose the item without receiving anything in return."
+                        dropWarning = raw_input("\nAre you sure you want to drop the item? (y/n) ")
+                        if dropWarning == "y":
+                            try:
+                                self.inventory[int(invDrop) - 1].drop(self)
+                            except IndexError:
+                                error()
+                                continue
+                        elif dropWarning == "n":
+                            continue
+                        else:
+                            error()
+                            continue
+                    elif invOption == "3":
+                        continue
+                    else:
+                        error()
+                        continue                
+                else:
+                    print "Your inventory is empty."
+                    sleep(1.5)
+            elif invChoice == "2":
+                print "\n\nGear:\n"
+                count = 0
+                for item in self.gear:
+                    gearObject = "[Empty]" # the default setting, set into something else if...
+                    if not self.gear[count] == None: # ...the slot in gear isn't empty
+                        gearObject = item.name # printable item name changed from the default [Empty] to the actual name
+                        gearDescription = "(" + str(item.bonus) + " bonus to " + item.stat + ")" # the (20 bonus to attack) part
+                        print str(count + 1) + ".", self.gearSlot[count] + ":", gearObject, gearDescription
+                    else:
+                        print str(count + 1) + ".", self.gearSlot[count] + ":", gearObject # [Empty] slot doesn't have a description
+                    count += 1
+                print "\nWhat do you want to do?\n"
+                print "1. Remove an item from your gear"
+                print "2. Cancel\n"     
+                gearOption = raw_input("Type the number: ")
+                if gearOption == "1":
+                    gearRemove = raw_input("\nType the number of the item you want to remove: ")
+                    try:
+                        if not self.gear[int(gearRemove) - 1] == None:
+                            self.inventory.append(self.gear[int(gearRemove) - 1]) # item "copied" to inventory
+                            self = self.gear[int(gearRemove) - 1].applyBonus(self, "remove")
+                            self.gear[int(gearRemove) - 1] = None # item removed from gear
+                            print "\nPiece of gear successfully moved to inventory."
+                            sleep(1)
+                        else:
+                            print "\nThat slot is empty."
+                            sleep(1.5)
+                            continue
+                    except IndexError: # indexerror will again occur if the number chosen by the user is out of the list's reach
+                        error()
+                        continue
+                elif gearOption == "2":
+                    continue
+                else:
+                    error()
+                    continue
+            elif invChoice == "3":
+                break
+            else:
+                error()
+                continue
+
+class Item:
+    def acquire(self, char):
+        char.inventory.append(self)
+        print "\nYou have acquired a", self.name + "!"
+        sleep(1.5)
+    def drop(self, char):
+        char.inventory.remove(self)
+        print "\nYou dropped a", self.name + "."
+        sleep(1.5)
+
+class Equipable(Item):
+    def __init__(self, name, value, stat, bonus, position):
+        self.name = name
+        self.value = value # defines the price
+        self.position = position # defines which slot in gear the item takes
+
+class Armor(Equipable):
+    def __init__(self, ac, dmgRes, fireRes, frostRes, lightningRes):
+        self.ac = ac
+        self.dmgRes = dmgRes
+        self.fireRes = fireRes
+        self.frostRes = frostRes
+        self.lightningRes = lightningRes
+    def equipArmor(self, process):
+        if process == "equip":
+            print "olol"
+
+class Weapon(Equipable):
+    def __init__(self, name, value, dmg, bonus, position, element, elementDmg):
+        self.name = name
+        self.value = value
+        self.dmg = dmg
+        self.bonus = bonus
+        self.position = position
+        self.element = element
+        self.elementDmg = elementDmg
+    def getDmg(self):
+        dieNr,dieVal = self.dmg.split("d")
+        return dieNr,dieVal,self.bonus
+
+class Treasure(Item):
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+class Town:
+    def __init__(self, name, descr, wanderMsg, shopMsg, restMsg):
+        self.name = name
+        self.descr = descr
+        self.wanderMsg = wanderMsg
+        self.shopMsg = shopMsg
+        self.restMsg = restMsg
+        
+def main(): # main menu
+    while True:
+        print "Welcome to HD's Awesome RPG (version 1.0)!"
+        print "\nPlease select from the following options:\n"
+        print "1. New Game"
+        print "2. Load a Saved Game"
+        print "3. Exit"
+        choice = raw_input("\nPlease type the number corresponding to your choice: ")
+        if choice == "1":
+            newGame() 
+        elif choice == "2":
+            loadGame()
+        elif choice == "3":
+            break
+        else:
+            error()
+            continue
+
+def newGame():
+    char = raw_input("\nType a name for your character: ")
+    charName = char
+    print "\nNow you'll get to choose your character's class and roll the starting stats!"
+    raw_input()
+    print "I want to be a..."
+    print "\n1. Warrior"
+    print "2. Wizard"
+    print "3. Rogue"
+    while True:
+        classChoice = raw_input("\nPlease type the number corresponding to your choice: ")
+        if classChoice == "1": # naming the class and distributing class-dependent stat bonuses
+            charClass = "Warrior"
+            recStats = ["Strength", "Constitution"]
+            break
+        elif classChoice == "2":
+            charClass = "Wizard"
+            recStats = ["Intelligence", "Wisdom"]
+            break
+        elif classChoice == "3":
+            charClass = "Rogue"
+            recStats = ["Dexterity", "Charisma"]
+            break
+        else:
+            error()
+            continue
+    print "Your attributes will be decided by rolling some dice."
+    attribCount = 0
+    attribValues = []
+    while attribCount < 6:
+        attribCount += 1
+        rollCount = 0
+        results = []
+        while rollCount < 4:
+            rollCount += 1
+            result = roll(1, 6)
+            results.append(result)
+        results.sort()
+        del results[-1]
+        attribScore = results[0] + results[1] + results[2]
+        if attribScore < 10:
+            attribCount -= 1
+            continue
+        attribValues.append(attribScore)
+    displayOrder = 0
+    attribValues.sort()
+    attribValues.reverse()
+    raw_input()
+    print "\nYou rolled (highest first):"
+    for entry in attribValues:
+        displayOrder += 1
+        sleep(0.5)
+        print str(displayOrder) + ". " + str(attribValues[displayOrder - 1])
+    raw_input()
+    print "\nThese will be distributed to the following attributes:\n\n1. Strength\n2. Dexterity\n3. Constitution\n4. Intelligence\n5. Wisdom\n6. Charisma"
+    while True:
+        autoDistr = raw_input("\nDo you want to use automatic distribution (class-specific)? (y/n) ")
+        if autoDistr == "y":
+            if charClass == "Warrior":
+                strength = attribValues[0] + 2
+                constitution = attribValues[1] + 2
+                dexterity = attribValues[2]
+                charisma = attribValues[3]
+                wisdom = attribValues[4]
+                intelligence = attribValues[5]
+            elif charClass == "Wizard":
+                intelligence = attribValues[0] + 2
+                wisdom = attribValues[1] + 2
+                charisma = attribValues[2]
+                dexterity = attribValues[3]
+                constitution = attribValues[4]
+                strength = attribValues[5]
+            else:
+                dexterity = attribValues[0] + 2
+                charisma = attribValues[1] + 2
+                strength = attribValues[2]
+                constitution = attribValues[3]
+                wisdom = attribValues[4]
+                intelligence = attribValues[5]
+            break
+        elif autoDistr == "n":
+            print "\nAs a " + charClass + " it is recommended you distribute the highest dice rolls to " + recStats[0] + " and " + recStats[1] + "."
+            attribChoices = [] # creates a list used to check that every value is only used once
+            while True:
+                print "Type the number corresponding to the dice roll you want to use for each attribute:"
+                strengthInput = input("\nStrength: ")
+                attribChoices.append(strengthInput)
+                strength = attribValues[strengthInput - 1]
+                if charClass == "Warrior":
+                    strength += 2
+                dexterityInput = input("\nDexterity: ")
+                attribChoices.append(dexterityInput)
+                if attribChoices.count(dexterityInput) > 1: # checks the value is only used once
+                    statError(attribValues)
+                    continue
+                dexterity = attribValues[dexterityInput - 1]
+                if charClass == "Rogue":
+                    dexterity += 2
+                constitutionInput = input("\nConstitution: ")
+                attribChoices.append(constitutionInput)
+                if attribChoices.count(constitutionInput) > 1:
+                    statError(attribValues)
+                    continue
+                constitution = attribValues[constitutionInput - 1]
+                if charClass == "Warrior":
+                    constitution += 2
+                intelligenceInput = input("\nIntelligence: ")
+                attribChoices.append(intelligenceInput)
+                if attribChoices.count(intelligenceInput) > 1:
+                    statError(attribValues)
+                    continue
+                intelligence = attribValues[intelligenceInput - 1]
+                if charClass == "Wizard":
+                    intelligence += 2
+                wisdomInput = input("\nWisdom: ")
+                attribChoices.append(wisdomInput)
+                if attribChoices.count(wisdomInput) > 1:
+                    statError(attribValues)
+                    continue
+                wisdom = attribValues[wisdomInput - 1]
+                if charClass == "Wizard":
+                    wisdom += 2
+                charismaInput = input("\nCharisma: ")
+                attribChoices.append(charismaInput)
+                if attribChoices.count(charismaInput) > 1:
+                    statError(attribValues)
+                    continue
+                charisma = attribValues[charismaInput - 1]
+                if charClass == "Rogue":
+                    charisma += 2
+                break
+            break
+        else:
+            error()
+            continue
+    print "\nAs a " + charClass + " you receive slight bonuses to " + recStats[0] + " and " + recStats[1] + "."
+    raw_input()
+    print "\nYour stats:\n\nStrength: " + str(strength) + "\nDexterity: " + str(dexterity) + "\nConstitution: " + str(constitution) + "\nIntelligence: " + str(intelligence) + "\nWisdom: " + str(wisdom) + "\nCharisma: " + str(charisma)
+
+    char = Character(charName, charClass, 1, strength, dexterity, constitution, intelligence, wisdom, charisma, 0, 100, 2, 2)
+    char.firstSetup()
+    town = khand
+    print "\nYou will now enter Khand, a quiet little town with only minor monsters around: a perfect place to begin your adventure!\n"
+    raw_input()
+    game(char, town)
+
+def loadGame():
+    print "olol"
+
+def game(char, town):
+    while True: # looped in case of invalid input
+        if char.exp >= char.expGoal: # checking if the required exp for level-up has been achieved
+            char.levelup()
+        char.attack = char.stre + char.dext // 4 + char.attackBonus
+        char.defense = char.stre + char.dext // 2 + char.defenseBonus
+        char.magic = 2 * char.inte + char.dext // 6 + char.magicBonus
+        char.hp = 20 + 5 * char.lvl + char.stre
+        char.mp = 10 + 2 * char.lvl + 2 * char.inte
+        print "\n\n\n", char.name, "the", char.cls, "(level", str(char.lvl) + ")"
+        print "HP:", str(char.currentHp) + "/" + str(char.hp)
+        print "MP:", str(char.currentMp) + "/" + str(char.mp)
+        print "HP Potions:", char.hpPot
+        print "MP Potions:", char.mpPot
+        print "Experience:", str(char.exp) + "/" + str(char.expGoal)
+        print "Credits:", char.cred
+        print "Staying in", town.name
+        print "\n\nWhat would you like to do?\n"
+        print "1.", town.wanderMsg
+        print "2.", town.shopMsg
+        print "3. Access your inventory and gear"
+        print "4. Restore your HP and MP by", town.restMsg
+        print "5. Move to a different place"
+        print "6. Save the game"
+        print "7. Quit to main menu\n"
+        gameChoice = raw_input("Type the number: ")
+        if gameChoice == "1":
+            rand = randint(1, 50)
+            if rand == 50:
+                listRandomizer = randint(0, len(eval(town.name + "Treasures")) - 1)
+                treasure = eval(town.name + "Treasures")[listRandomizer]
+                print "olol"
+            elif rand > 47:
+                listRandomizer = randint(0, len(eval(town.name + "Items")) - 1)
+                item = eval(town.name + "Items")[listRandomizer]
+                print "olol"
+            else:
+                listRandomizer = randint(0, len(eval(town.name + "Monsters")) - 1)
+                monster = eval(town.name + "Monsters")[listRandomizer]
+                char = monsterBattle(monster, char, town)
+        elif gameChoice == "2":
+            print "\nWhich shop do you want to visit?\n"
+            print "1. Weapon shop"
+            print "2. Armor shop"
+            print "3. Potion shop"
+            print "4. Cancel"
+            shopChoice = raw_input("\nType the number: ")
+            if shopChoice == "1":
+                shopType = "Weapon"
+            elif shopChoice == "2":
+                shopType = "Armor"
+            if shopChoice == "1" or shopChoice == "2":
+                shop = eval(town.name + shopType)
+                print "\nWelcome to", town.name + "'s", shopType, "shop!\n"
+                print "What do you want to do?\n"
+                print "1. Buy"
+                print "2. Sell"
+                print "3. Exit\n"
+                shopAction = raw_input("Type the number: ")
+                if shopAction == "1":
+                    print "\n\nShopkeeper's items:\n"
+                    count = 0
+                    for item in shop:
+                        count += 1
+                        print str(count) + ".", item.name, "(" + str(item.value), "credits)"
+                    shopBuy = raw_input("\nType the number of the item you wish to purchase or e to exit: ")
+                    if shopBuy.lower() == "e":
+                        continue
+                    try:
+                        buyObject = shop[int(shopBuy) - 1]
+                        if buyObject.value > char.cred:
+                            print "\nYou don't have enough credits."
+                            raw_input()
+                            continue
+                        buyConfirm = raw_input("\nAre you sure you wish to purchase the " + buyObject.name + " for " + str(buyObject.value) + " credits? (y/n) ")
+                        if buyConfirm.lower() == "y":
+                            char.cred -= buyObject.value
+                            char.inventory.append(buyObject)
+                            print "\nYou have successfully bought the", buyObject.name + "!"
+                            raw_input()
+                        else:
+                            continue
+                    except IndexError:
+                        error()
+                        continue
+                    except ValueError:
+                        error()
+                        continue
+                if shopAction == "2":
+                    print "\n\nYour items:\n"
+                    count = 0
+                    for item in char.inventory:
+                        count += 1
+                        print str(count) + ".", item.name, "(" + str(item.value // 3), "credits)"
+                    shopSell = raw_input("\nType the number of the item you wish to sell or e to exit: ")
+                    if shopSell.lower() == "e":
+                        continue
+                    try:
+                        sellObject = char.inventory[int(shopSell) - 1]
+                        sellConfirm = raw_input("\nAre you sure you wish to sell the " + sellObject.name + " for " + str(sellObject.value // 3) + " credits? (y/n) ")
+                        if sellConfirm.lower() == "y":
+                            char.cred += sellObject.value // 3
+                            del char.inventory[int(shopSell) - 1]
+                            print "\nYou have successfully sold the", sellObject.name + "."
+                            raw_input()
+                        else:
+                            continue
+                    except IndexError:
+                        error()
+                        continue
+                    except ValueError:
+                        error()
+                        continue
+            elif shopChoice == "3":
+                hpPotionPrice = char.cred // 5
+                if hpPotionPrice > 50:
+                    hpPotionPrice = 50
+                mpPotionPrice = char.cred // 7
+                if mpPotionPrice > 35:
+                    mpPotionPrice = 35                
+                print "\nWelcome to", town.name + "'s Potion shop!\n"
+                print "1. Buy HP Potions (" + str(hpPotionPrice), "credits each)"
+                print "2. Buy MP Potions (" + str(mpPotionPrice), "credits each)"
+                print "3. Exit\n"
+                potShopChoice = raw_input("Type the number: ")
+                if potShopChoice == "1":
+                    potAmount = raw_input("\nPlease type how many you want to buy: ")
+                    try:
+                        if int(potAmount) * hpPotionPrice > char.cred:
+                            print "You don't have money for that many."
+                            raw_input()
+                            continue
+                        potionConfirm = raw_input("\nAre you sure you want to buy " + str(potAmount) + " HP Potions for " + str(int(potAmount) * hpPotionPrice) + " credits? (y/n) ")
+                        if potionConfirm.lower() == "y":
+                            char.hpPot += int(potAmount)
+                            char.cred -= int(potAmount) * hpPotionPrice
+                            print "\nYou have successfully bought", potAmount, "HP Potions!"
+                            sleep(1.5)
+                        else:
+                            continue
+                    except TypeError:
+                        error()
+                        continue
+                if potShopChoice == "2":
+                    potAmount = raw_input("\nPlease type how many you want to buy: ")
+                    try:
+                        if int(potAmount) * mpPotionPrice > char.cred:
+                            print "\nYou don't have money for that many."
+                            raw_input()
+                            continue
+                        potionConfirm = raw_input("\nAre you sure you want to buy " + str(potAmount) + " MP Potions for " + str(int(potAmount) * mpPotionPrice) + " credits? (y/n) ")
+                        if potionConfirm.lower() == "y":
+                            char.mpPot += int(potAmount)
+                            char.cred -= int(potAmount) * mpPotionPrice
+                            print "\nYou have successfully bought", potAmount, "MP Potions!"
+                            sleep(1.5)
+                        else:
+                            continue
+                    except TypeError:
+                        error()
+                        continue
+        elif gameChoice == "3":
+            char.invAction()
+        elif gameChoice == "4":
+            if 20 < char.cred // 10:
+                price = 20
+            else:
+                price = char.cred // 10
+            restChoice = raw_input("\nDo you want to restore your HP and MP for " + price + " credits by " + town.restMsg + "? (y/n) ")
+            if restChoice.lower() == "y":
+                char.fill()
+                char.cred -= price
+                print "\nHP and MP fully restored.\n"
+            elif restChoice.lower() == "n":
+                continue
+            else:
+                error()
+                continue
+        elif gameChoice == "5":
+            changeTown
+        elif gameChoice == "6":
+            print "olol"
+        elif gameChoice == "7":
+            break
+        else:
+            error()
+            continue
+
+def monsterBattle(monster, char, town):
+    print "\n\nYou encounter a", monster.name + "!"
+    sleep(1)
+    while monster.currentHp > 0:
+        if char.currentHp <= 0:
+            print "\n\nYou have died!\n"
+            sleep(1.5)
+            print "Press any key to start a new game or load an existing save."
+            raw_input()
+            main()
+        print "\n\n", monster.name, "(level", str(monster.lvl) + ")            ", char.name, "the", char.cls, "(level", str(char.lvl) + ")"
+        print "  HP:", str(monster.currentHp) + "/" + str(monster.hp), "                   HP:", str(char.currentHp) + "/" + str(char.hp), "MP:", str(char.currentMp) + "/" + str(char.mp),"\n\n\n"
+        print "What will you do?\n"
+        print "1. Attack"
+        print "2. Attack using a skill or spell"
+        print "3. Use a potion"
+        print "4. Try to escape\n"
+        battleChoice = raw_input("Type the number: ")
+        if battleChoice == "1":
+            if char.getToHit() >= monster.ac: # determines whether you'll hit or not
+                print "olol"
+            
+
+
+
+            
+                damageInflicted = char.getDmg(monster)
+                monster.currentHp -= damageInflicted
+                print "\nYou hit the", monster.name + "!"
+                sleep(1)
+                print "The", monster.name, "loses", damageInflicted, "HP!"
+            else:
+                print "\nYou miss the", monster.name + "!"
+            sleep(2)
+            if monster.currentHp <= 0: # the monster won't get a chance to attack back if it's dead
+                break
+            monsterTurn(char, monster)
+        elif battleChoice == "2":
+            if char.getAttRate() >= monster.getDefRate():
+                damageInflicted = char.getDmg(monster)
+                monster.currentHp -= damageInflicted
+                print "\nYour spell hits the", monster.name + "!"
+                sleep(1)
+                print "The", monster.name, "loses", damageInflicted, "HP!"
+            else:
+                print "\nYour spell misses the", monster.name + "!"
+            sleep(2)
+            if monster.currentHp <= 0:
+                break
+            monsterTurn(char, monster)
+        elif battleChoice == "3":
+            while True:
+                print "\n\nUse a potion:\n"
+                print "1. HP Potion", "(" + str(char.hpPot) + ")"
+                print "2. MP Potion", "(" + str(char.mpPot) + ")"
+                print "3. Cancel"
+                potionChoice = raw_input("\nType the number: ")
+                if potionChoice == "1":
+                    if char.hpPot == 0:
+                        print "You don't have any HP Potions."
+                        continue
+                    char.hpPot -= 1
+                    char.currentHp += char.hp // 3
+                    if char.currentHp > char.hp:
+                        char.currentHp = char.hp
+                    print "You used a HP Potion!"
+                    sleep(1)
+                    print "You recovered", str(char.hp // 3), "HP!"
+                    sleep(1)
+                    break
+                elif potionChoice == "2":
+                    if char.mpPot == 0:
+                        print "You don't have any MP Potions."
+                        continue
+                    char.mpPot -= 1
+                    char.currentMp += char.mp // 3
+                    if char.currentMp > char.mp:
+                        char.currentMp = char.mp
+                    print "You used an MP Potion!"
+                    sleep(1)
+                    print "You recovered", str(char.mp // 3), "MP!"
+                    sleep(1)
+                    break
+                elif potionChoice == "3":
+                    break
+                else:
+                    error()
+                    continue
+        elif battleChoice == "4":
+            if char.getDefRate() >= monster.getDefRate(char) + randint(0, 3 * char.lvl):
+                print "\nYou successfully flee from the", monster.name + "!"
+                sleep(1.5)
+                game(char, town)
+            else:
+                print "\nYou could not flee from the", monster.name + "!"
+                sleep(1.5)
+                char = monsterTurn(char, monster)
+                continue
+    monster.currentHp = monster.hp # so that next time you wander the monster won't have died already
+    print "\nThe", monster.name, "is killed!\n"
+    sleep(1)
+    print "You gained", monster.exp, "experience points and", monster.cred, "credits!\n"
+    sleep(2)
+    char.exp += monster.exp
+    char.cred += monster.cred
+    return char
+
+def monsterTurn(char, monster):
+    print "\nThe", monster.name, monster.hit
+    sleep(1)
+    if monster.getAttRate(char) >= char.getDefRate():
+        damageReceived = monster.getDmg(char)
+        char.currentHp -= damageReceived
+        print "You lose", damageReceived, "HP!"
+    else:
+        print "The", monster.name, "misses!"
+    sleep(2)
+    return char
+
+def roll(quantity, dieValue):
+    result = quantity * randint(1, dieValue)
+    return result
+    
+
+def error():
+    print "\nInvalid choice, please press Enter to try again."
+    raw_input()
+
+# creating a database of towns, their shops, monsters and items (<1/5 done so far)
+khand = Town("Khand", "A small town at the outskirt of a big forest", "Go wandering in the nearby forest", "Go shopping", "resting at the local inn")
+dejos = Town("Dejos", "A primitive village in a jungle", "Go explore the jungle", "Go see local merchants", "paying a local to build you a hammock and sleeping there")
+crammon = Town("Crammon", "A community of wild people congregated to the front part of a huge cave", "Wander deeper into the cave", "Go to the merchant section of the cave", "buying some moss and sleeping on it")
+merkor = Town("Merkor", "A well guarded town near ancient ruins", "Go wandering in the nearby ruins", "Visit the shops", "resting at the luxurious local hotel (adventurers for HALF THE PRICE!)")
+nekweros = Town("Nekweros", "A collective of extremely strong adventurers and merchants near an infamous volcano", "Go wandering inside the volcano", "Visit the local merchants", "renting a room for one night at the local inn")
+
+# monsters
+crippledButterfly = Monster("Crippled Butterfly", 1, 2, 3, randint(15, 25), 5, 10, "swings at you with its crippled limb!")
+bugrat = Monster("Bugrat", 2, 4, 6, randint(25, 35), 8, 14, "jumps at your face!")
+babyBear = Monster("Baby Bear", 4, 9, 5, randint(40, 55), 10, 16, "tries to violently hug you!")
+wildFox = Monster("Wild Fox", 5, 8, 9, randint(45, 60), 13, 20, "attempts to bite you!")
+wolf = Monster("Wolf", 7, 11, 9, randint(55, 70), 15, 25, "chomps at your thigh!")
+
+monkey = Monster("Monkey", 9, 10, 13, randint(50, 65), 18, 30, "throws a banana at you!")
+emeraldTreeBoa = Monster("Emerald Tree Boa", 10, 12, 14, randint(65, 80), 22, 36, "tries to bite you!")
+hugeSpider = Monster("Huge Spider", 12, 14, 14, randint(75, 90), 26, 44, "tries to bite you!")
+mutantFirefly = Monster("Mutant Firefly", 15, 16, 16, randint(80, 95), 30, 50, "flies at you!")
+mutantGorilla = Monster("Mutant Gorilla", 18, 22, 16, randint(105, 120), 40, 62, "tries to grab your throat!")
+
+# assigning the monsters to each town
+KhandMonsters = [crippledButterfly, bugrat, babyBear, wildFox, wolf]
+DejosMonsters = [monkey, emeraldTreeBoa, hugeSpider, mutantFirefly, mutantGorilla]
+CrammonMonsters = []
+MerkorMonsters = []
+NekwerosMonsters = []
+
+# weapons for each town - syntax: (name, value, dmg, bonus (to-hit and dmg), inv slot, element, element dmg)
+woodenSword = Weapon("Wooden Sword", 50, "1d6", 0, 0, None, 0)
+rustySword = Equipable("Rusty Sword", 150, "1d6", 1, 0)
+woodenDagger = Equipable("Wooden Dagger", 50, "1d4", 0, 0)
+rustyDagger = Equipable("Rusty Dagger", 150, "1d4", 1, 0)
+shortbow = Equipable("Shortbow", 100, "1d6", 0, 0)
+longbow = Equipable("Longbow", 200, "1d6", 1, 0)
+crookedStaff = Equipable("Crooked Staff", 50, "1d6", 0, 0)
+woodenStaff = Equipable("Wooden Staff", 150, "1d6", 1, 0)
+
+ironSword = Equipable("Iron Sword", 300, "attack", 50, 0)
+steelSword = Equipable("Steel Sword", 500, "attack", 70, 0)
+ironDagger = Equipable("Iron Dagger", 300, "attack", 40, 0)
+steelDagger = Equipable("Steel Dagger", 500, "attack", 60, 0)
+willowShortbow = Equipable("Willow Shortbow", 400, "attack", 35, 0)
+willowLongbow = Equipable("Willow Longbow", 600, "attack", 50, 0)
+grayStaff = Equipable("Gray Staff", 300, "magic", 60, 0)
+yellowStaff = Equipable("Yellow Staff", 500, "magic", 80, 0)
+
+titaniumSword = Equipable("Titanium Sword", 300, "attack", 50, 0)
+darksteelSword = Equipable("Darksteel Sword", 500, "attack", 70, 0)
+titaniumDagger = Equipable("Titanium Dagger", 300, "attack", 40, 0)
+darksteelDagger = Equipable("Darksteel Dagger", 500, "attack", 60, 0)
+mapleShortbow = Equipable("Maple Shortbow", 400, "attack", 35, 0)
+mapleLongbow = Equipable("Maple Longbow", 600, "attack", 50, 0)
+greenStaff = Equipable("Green Staff", 300, "magic", 60, 0)
+blueStaff = Equipable("Blue Staff", 500, "magic", 80, 0)
+
+darktitaniumSword = Equipable("Darktitanium Sword", 300, "attack", 50, 0)
+darksteelSword = Equipable("Darksteel Sword", 500, "attack", 70, 0)
+darktitaniumDagger = Equipable("Darktitanium Dagger", 300, "attack", 40, 0)
+darksteelDagger = Equipable("Darksteel Dagger", 500, "attack", 60, 0)
+nomadShortbow = Equipable("Nomad Shortbow", 400, "attack", 35, 0)
+nomadLongbow = Equipable("Nomad Longbow", 600, "attack", 50, 0)
+redStaff = Equipable("Red Staff", 300, "magic", 60, 0)
+blackStaff = Equipable("Black Staff", 500, "magic", 80, 0)
+
+titaniumSword = Equipable("Titanium Sword", 300, "attack", 50, 0)
+osmiumSword = Equipable("Osmium Sword", 500, "attack", 70, 0)
+titaniumDagger = Equipable("Titanium Dagger", 300, "attack", 40, 0)
+osmiumDagger = Equipable("Osmium Dagger", 500, "attack", 60, 0)
+darkShortbow = Equipable("Dark Shortbow", 400, "attack", 35, 0)
+darkLongbow = Equipable("Dark Longbow", 600, "attack", 50, 0)
+holyStaff = Equipable("Holy Staff", 300, "magic", 60, 0)
+goldenStaff = Equipable("Golden Staff", 500, "magic", 80, 0)
+
+# weapon shops
+KhandWeapon = [woodenSword, rustySword, woodenDagger, rustyDagger, shortbow, longbow, crookedStaff, woodenStaff]
+DejosWeapon = [ironSword, steelSword, ironDagger, steelDagger, willowShortbow, willowLongbow, grayStaff, yellowStaff]
+CrammonWeapon = [titaniumSword, darksteelSword, titaniumDagger, darksteelDagger, mapleShortbow, mapleLongbow, greenStaff, blueStaff]
+MerkorWeapon = []
+NekwerosWeapon = []
+
+# shields syntax: (name, value, ac, bonus (to saving throws and ac), inv slot, element, element res)
+woodenShield = Equipable("Wooden Shield", 30, "ac goes here", 0, 1, None, 0)
+rustyShield = Equipable("Rusty Shield", 100, "defense", 30, 1)
+
+ironShield = Equipable("Iron Shield", 200, "defense", 45, 1)
+steelShield = Equipable("Steel Shield", 450, "defense", 60, 1)
+
+titaniumShield = Equipable("Titanium Shield", 900, "defense", 45, 1)
+darksteelShield = Equipable("Darksteel Shield", 1500, "defense", 60, 1)
+
+darktitaniumShield = Equipable("Darktitanium Shield", 2500, "defense", 45, 1)
+steelShield = Equipable("Steel Shield", 3500, "defense", 60, 1)
+
+ironShield = Equipable("Iron Shield", 6000, "defense", 45, 1)
+osmiumShield = Equipable("Steel Shield", 8500, "defense", 60, 1)
+
+# headgear
+halfABucket = Equipable("Half A Bucket", 30, "defense", 15, 2)
+rustyHelmet = Equipable("Rusty Helmet", 100, "defense", 30, 2)
+leatherHelmet = Equipable("Leather Helmet", 30, "defense", 13, 2)
+archerCap = Equipable("Archer Cap", 100, "defense", 25, 2)
+dunceCap = Equipable("Dunce Cap", 30, "defense", 10, 2)
+raggedWizardHat = Equipable("Ragged Wizard Hat", 100, "defense", 20, 2)
+
+ironHelmet = Equipable("Iron Helmet", 200, "defense", 45, 2)
+steelHelmet = Equipable("Steel Helmet", 450, "defense", 60, 2)
+
+
+wizardHat = Equipable("Wizard Hat", 200, "defense", 35, 2)
+bigWizardHat = Equipable("Big Wizard Hat", 450, "defense", 50, 2)
+
+# body armor
+wifeBeater = Equipable("Wife Beater", 50, "defense", 20, 3)
+leatherJacket = Equipable("Leather Jacket", 150, "defense", 35, 3)
+camoTshirt = Equipable("Camo T-shirt", 50, "defense", 18, 3)
+oldArcherJacket = Equipable("Old Archer Jacket", 150, "defense", 33, 3)
+tribalTshirt = Equipable("Tribal T-shirt", 50, "defense", 15, 3)
+raggedWizardRobe = Equipable("Ragged Wizard Robe", 150, "defense", 30, 3)
+
+ironChainmail = Equipable("Iron Chainmail", 50, "defense", 20, 3)
+ironPlatemail = Equipable("Iron Platemail", 150, "defense", 35, 3)
+leatherArmor = Equipable("Leather Armor", 50, "defense", 18, 3)
+studdedLeatherArmor = Equipable("Studded Leather Armor", 150, "defense", 33, 3)
+wizardRobe = Equipable("Wizard Robe", 50, "defense", 15, 3)
+yellowWizardRobe = Equipable("Yellow Wizard Robe", 150, "defense", 30, 3)
+
+ironChainmail = Equipable("Iron Chainmail", 50, "defense", 20, 3)
+ironPlatemail = Equipable("Iron Platemail", 150, "defense", 35, 3)
+leatherArmor = Equipable("Leather Armor", 50, "defense", 18, 3)
+studdedLeatherArmor = Equipable("Studded Leather Armor", 150, "defense", 33, 3)
+wizardRobe = Equipable("Wizard Robe", 50, "defense", 15, 3)
+yellowWizardRobe = Equipable("Yellow Wizard Robe", 150, "defense", 30, 3)
+
+ironChainmail = Equipable("Iron Chainmail", 50, "defense", 20, 3)
+ironPlatemail = Equipable("Iron Platemail", 150, "defense", 35, 3)
+leatherArmor = Equipable("Leather Armor", 50, "defense", 18, 3)
+studdedLeatherArmor = Equipable("Studded Leather Armor", 150, "defense", 33, 3)
+redRobe = Equipable("Red Robe", 50, "defense", 15, 3)
+blackWizardRobe = Equipable("Black Wizard Robe", 150, "defense", 30, 3)
+
+ironChainmail = Equipable("Iron Chainmail", 50, "defense", 20, 3)
+ironPlatemail = Equipable("Iron Platemail", 150, "defense", 35, 3)
+leatherArmor = Equipable("Leather Armor", 50, "defense", 18, 3)
+studdedLeatherArmor = Equipable("Studded Leather Armor", 150, "defense", 33, 3)
+holyWizardRobe = Equipable("Holy Wizard Robe", 50, "defense", 15, 3)
+goldenWizardRobe = Equipable("Golden Wizard Robe", 150, "defense", 30, 3)
+
+# gloves
+raggedLeatherGloves = Equipable("Ragged Leather Gloves", 30, "defense", 10, 4)
+leatherGloves = Equipable("Leather Gloves", 120, "defense", 20, 4)
+
+snakeskinGloves = Equipable("Snakeskin Gloves", 120, "defense", 20, 4)
+spikedSnakeskinGloves = Equipable("Spiked Snakeskin Gloves", 120, "defense", 20, 4)
+
+batskinGloves = Equipable("Batskin Gloves", 120, "defense", 20, 4)
+spikedBatskinGloves = Equipable("Spiked Batskin Gloves", 120, "defense", 20, 4)
+
+chimeraskinGloves = Equipable("Chimeraskin Gloves", 120, "defense", 20, 4)
+spikedChimeraskinGloves = Equipable("Spiked Chimeraskin Gloves", 120, "defense", 20, 4)
+
+dragonskinGloves = Equipable("Dragonskin Gloves", 120, "defense", 20, 4)
+spikedDragonskinGloves = Equipable("Spiked Dragonskin Gloves", 120, "defense", 20, 4)
+
+# boots
+raggedLeatherBoots = Equipable("Ragged Leather Boots", 30, "defense", 10, 5)
+leatherBoots = Equipable("Leather Boots", 120, "defense", 20, 5)
+
+snakeskinBoots = Equipable("Snakeskin Boots", 120, "defense", 20, 5)
+spikedSnakeskinBoots = Equipable("Spiked Snakeskin Boots", 120, "defense", 20, 5)
+
+batskinBoots = Equipable("Batskin Boots", 120, "defense", 20, 5)
+spikedBatskinBoots = Equipable("Spiked Batskin Boots", 120, "defense", 20, 5)
+
+chimeraskinBoots = Equipable("Chimeraskin Boots", 120, "defense", 20, 5)
+spikedChimeraskinBoots = Equipable("Spiked Chimeraskin Boots", 120, "defense", 20, 5)
+
+dragonskinBoots = Equipable("Dragonskin Boots", 120, "defense", 20, 5)
+spikedDragonskinBoots = Equipable("Spiked Dragonskin Boots", 120, "defense", 20, 5)
+
+# armor shops
+KhandArmor = [woodenShield, rustyShield, halfABucket, rustyHelmet, wifeBeater, leatherJacket, camoTshirt, oldArcherJacket, tribalTshirt, raggedWizardRobe, raggedLeatherGloves, leatherGloves, raggedLeatherBoots, leatherBoots]
+DejosArmor = []
+CrammonArmor = []
+MerkorArmor = []
+NekwerosArmor = []
+
+main()
